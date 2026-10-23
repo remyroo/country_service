@@ -1,11 +1,12 @@
 package com.rehema.country_service.service;
 
 import java.util.Locale;
+import java.util.List;
+import com.rehema.country_service.dto.UpdateCountryRequest;
 
 import com.rehema.country_service.client.CountryDetails;
 import com.rehema.country_service.client.CountrySoapClient;
 import com.rehema.country_service.dto.CountryResponse;
-import com.rehema.country_service.dto.LanguageResponse;
 import com.rehema.country_service.model.CountryInfo;
 import com.rehema.country_service.model.Language;
 import org.slf4j.Logger;
@@ -41,10 +42,23 @@ public class CountryService {
 
         CountryInfo saved = persistenceService.create(country);
         log.info("Country saved id={} isoCode={}", saved.getId(), saved.getIsoCode());
-        return new CountryResponse(saved.getId(), saved.getIsoCode(), saved.getName(), saved.getCapital(),
-                saved.getPhoneCode(), saved.getContinentCode(), saved.getCurrencyCode(), saved.getFlagUrl(),
-                saved.getLanguages().stream().map(language ->
-                        new LanguageResponse(language.getId(), language.getIsoCode(), language.getName())).toList());
+        return CountryResponse.from(saved);
+    }
+
+    public List<CountryResponse> getCountries() {
+        return persistenceService.findAll();
+    }
+
+    public CountryResponse getCountry(Long id) {
+        return persistenceService.findById(id);
+    }
+
+    public CountryResponse updateCountry(Long id, UpdateCountryRequest request) {
+        return persistenceService.update(id, request);
+    }
+
+    public void deleteCountry(Long id) {
+        persistenceService.delete(id);
     }
 
     static String normalizeName(String name) {

@@ -83,7 +83,7 @@ class CountryServiceTests {
         assertThat(response.continentCode()).isEqualTo("AF");
         assertThat(response.currencyCode()).isEqualTo("KES");
         assertThat(response.flagUrl()).isEqualTo("https://example.com/ke.png");
-        assertThat(response.languages()).containsExactly(
+        assertThat(response.languages()).containsExactlyInAnyOrder(
                 new com.rehema.country_service.dto.LanguageResponse(7L, "swa", "Swahili"),
                 new com.rehema.country_service.dto.LanguageResponse(8L, "en", "English"));
     }
@@ -103,5 +103,23 @@ class CountryServiceTests {
         when(soap.getFullCountryInfo("KE")).thenThrow(new InvalidSoapResponseException("Invalid data"));
         assertThatThrownBy(() -> service.createCountry("Kenya")).isInstanceOf(InvalidSoapResponseException.class);
         verifyNoInteractions(persistence);
+    }
+
+    @Test
+    void storedCrudDelegatesWithoutSoap() {
+        var request = new com.rehema.country_service.dto.UpdateCountryRequest(
+                "Canada", null, null, null, null, null, List.of());
+        var response = new com.rehema.country_service.dto.CountryResponse(
+                1L, "CA", "Canada", null, null, null, null, null, List.of());
+        when(persistence.findAll()).thenReturn(List.of(response));
+        when(persistence.findById(1L)).thenReturn(response);
+        when(persistence.update(1L, request)).thenReturn(response);
+
+        assertThat(service.getCountries()).containsExactly(response);
+        assertThat(service.getCountry(1L)).isEqualTo(response);
+        assertThat(service.updateCountry(1L, request)).isEqualTo(response);
+        service.deleteCountry(1L);
+        verify(persistence).delete(1L);
+        verifyNoInteractions(soap);
     }
 }

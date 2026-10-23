@@ -5,8 +5,8 @@ SOAP, store it in MySQL, and expose REST CRUD operations.
 
 Currently implemented: the `CountryInfo` and `Language` entities, their repositories,
 `CountryPersistenceService` for saving a country with shared languages, a tested
-SOAP client, and `POST /countries` connecting lookup to persistence. Read, update,
-and delete REST endpoints are upcoming milestones.
+SOAP client, and REST creation, read, update, and delete endpoints. POST fetches
+SOAP data; GET, PUT, and DELETE operate only on stored MySQL data.
 
 ## Run locally
 
@@ -66,8 +66,7 @@ curl -i http://localhost:8080/countries \
 The flow is: validate the name, trim and convert to sentence case (`Kenya`), call
 `CountryISOCode`, call `FullCountryInfo`, map the data, save the country with shared
 languages, then return `201 Created`. The response includes the generated country
-and language IDs and a `Location: /countries/{id}` header. The GET endpoint at that
-location will be added in the CRUD milestone. Repeating a successful creation
+and language IDs and a `Location: /countries/{id}` header. GET at that location retrieves the stored record. Repeating a successful creation
 returns `409 Conflict`; it does not update the stored country.
 
 Example response (IDs and language data depend on the database and SOAP response):
@@ -130,6 +129,54 @@ Run just the service and controller tests without MySQL or public-service access
 Service tests mock SOAP and persistence to check normalization, ordering, mapping,
 and early termination on failure. MockMvc tests send simulated HTTP requests and
 verify validation, status codes, the Location header, and safe response bodies.
+
+## Stored-data CRUD
+
+These endpoints never call SOAP, so stored data remains accessible during a SOAP outage:
+
+| Endpoint | Success | Missing record |
+| --- | --- | --- |
+| `GET /countries` | 200; JSON array, or `[]` when empty | Not applicable |
+| `GET /countries/{id}` | 200; country and languages | 404 |
+| `PUT /countries/{id}` | 200; updated country | 404 |
+| `DELETE /countries/{id}` | 204; empty body | 404 |
+
+```sh
+curl -i http://localhost:8080/countries
+curl -i http://localhost:8080/countries/52
+curl -i -X PUT http://localhost:8080/countries/52 \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Kenya","capital":"Nairobi","phoneCode":"254","continentCode":"AF","currencyCode":"KES","flagUrl":null,"languages":[{"isoCode":"swa","name":"Swahili"}]}'
+# Replace 52 with a disposable record ID before deleting:
+curl -i -X DELETE http://localhost:8080/countries/52
+```
+
+PUT replaces editable fields, not the country's ID or ISO code. A nonblank name
+and a non-null language list are required. Omitted/null descriptive fields are
+cleared; `"languages":[]` removes all associations. Country names are trimmed on
+update, preserving the caller's capitalization. Descriptive fields and language
+codes/names have a maximum of 255 characters; flag URLs allow 2048 characters.
+Nested language entries must have nonblank codes and names. Invalid requests and
+non-numeric/out-of-range ID formats return 400; nonexistent numeric IDs return 404.
+
+Language codes are normalized and reused. Repeated codes produce one association;
+existing catalog names win over supplied names. Replacing a country's languages
+or deleting the country preserves language rows and other countries' associations.
+Unused languages remain in the catalog. Response languages are sorted by code.
+
+`CountryPersistenceService` loads and maps read results inside read-only
+transactions. A fetch join loads the country list and languages together; results
+are ordered by country ID. Update and delete run in short write transactions.
+A failed update rolls back fields, associations, and newly created languages.
+The shared response mapper keeps POST/GET/PUT representations consistent.
+
+The list endpoint is deliberately unpaginated for this small assessment. There is
+no version-based concurrent-edit detection; simultaneous updates are not reported
+as version conflicts. Pagination and optimistic locking can be added if needed.
+
+Tests cover missing IDs, validation, replacement and clearing of languages, safe
+deletion, rollback, and explicitly verify no SOAP calls from stored-data CRUD.
+Database integration tests create dedicated records and clean up their own data.
 
 ## SOAP client
 
@@ -225,7 +272,7 @@ after lookup, the failed transaction rolls back and the service retries once in 
 fresh transaction. Other constraint violations are not retried. Each attempt uses
 new entity objects so rolled-back generated IDs are never reused. The operation
 starts its own transaction even if the caller has one; call it after SOAP retrieval,
-not as part of a larger database transaction. It currently handles creation only.
+not as part of a larger database transaction. Creation and updates share the language resolution and bounded retry logic.
 
 ## Verify this milestone
 

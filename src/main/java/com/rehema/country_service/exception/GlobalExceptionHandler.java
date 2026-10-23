@@ -23,15 +23,22 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     protected ResponseEntity<Object> handleMethodArgumentNotValid(MethodArgumentNotValidException exception,
             HttpHeaders headers, HttpStatusCode status, WebRequest request) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status,
-                "Country name must not be blank and must be at most 255 characters");
+                "Request contains invalid fields");
+        problem.setProperty("errors", exception.getBindingResult().getFieldErrors().stream()
+                .map(error -> error.getField() + ": " + error.getDefaultMessage()).distinct().sorted().toList());
         return handleExceptionInternal(exception, problem, headers, status, request);
     }
 
     @Override
     protected ResponseEntity<Object> handleHttpMessageNotReadable(HttpMessageNotReadableException exception,
             HttpHeaders headers, HttpStatusCode status, WebRequest request) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, "Request must contain a valid JSON object with a name field");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, "Request must contain a valid JSON object");
         return handleExceptionInternal(exception, problem, headers, status, request);
+    }
+
+    @ExceptionHandler(CountryNotFoundException.class)
+    public ProblemDetail missingCountry(CountryNotFoundException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, exception.getMessage());
     }
 
     @ExceptionHandler(UnknownCountryException.class)
@@ -63,7 +70,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(DataAccessException.class)
     public ProblemDetail databaseFailure(DataAccessException exception) {
         log.error("Country persistence failed", exception);
-        return ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "Could not store country information");
+        return ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "Could not access country information");
     }
 
     @ExceptionHandler(Exception.class)
