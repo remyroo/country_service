@@ -1,0 +1,25 @@
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+   <soap:Body>
+      <m:FullCountryInfoResponse xmlns:m="http://www.oorsprong.org/websamples.countryinfo">
+         <m:FullCountryInfoResult>
+            <m:sISOCode>NL</m:sISOCode>
+            <m:sName>Netherlands</m:sName>
+            <m:sCapitalCity>Amsterdam</m:sCapitalCity>
+            <m:sPhoneCode>31</m:sPhoneCode>
+            <m:sContinentCode>EU</m:sContinentCode>
+            <m:sCurrencyISOCode>EUR</m:sCurrencyISOCode>
+            <m:sCountryFlag>http://www.oorsprong.org/WebSamples.CountryInfo/Flags/Netherlands.jpg</m:sCountryFlag>
+            <m:Languages>
+               <m:tLanguage>
+                  <m:sISOCode>fry</m:sISOCode>
+                  <m:sName>Frisian</m:sName>
+               </m:tLanguage>
+               <m:tLanguage>
+                  <m:sISOCode>nl</m:sISOCode>
+                  <m:sName>Dutch</m:sName>
+               </m:tLanguage>
+            </m:Languages>
+         </m:FullCountryInfoResult>
+      </m:FullCountryInfoResponse>
+   </soap:Body>
+</soap:Envelope>
