@@ -1,0 +1,16 @@
+.git
+**/.DS_Store
+.env
+.env.*
+target
+build
+.idea
+.vscode
+*.iml
+.agents
+.codex
+.aws
+docs
+HELP.md
+README.md
+*.log

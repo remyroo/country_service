@@ -1,4 +1,26 @@
 services:
+  app:
+    image: country-service:local
+    build: .
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/country_db
+      DB_USERNAME: ${DB_USERNAME:?Set DB_USERNAME in .env}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      COUNTRY_SOAP_ENDPOINT: ${COUNTRY_SOAP_ENDPOINT:-http://webservices.oorsprong.org/websamples.countryinfo/CountryInfoService.wso}
+      COUNTRY_SOAP_CONNECT_TIMEOUT: ${COUNTRY_SOAP_CONNECT_TIMEOUT:-2s}
+      COUNTRY_SOAP_READ_TIMEOUT: ${COUNTRY_SOAP_READ_TIMEOUT:-5s}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--max-time", "3", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
   mysql:
     image: mysql:8.4
     container_name: country-service-mysql

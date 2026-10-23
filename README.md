@@ -24,7 +24,7 @@ Compose reads `.env` automatically. Spring Boot does not, so export the values
 into your shell before running Maven:
 
 ```sh
-docker compose up -d
+docker compose up -d mysql
 docker compose ps
 set -a
 . ./.env
@@ -52,6 +52,88 @@ it did not reset the database or change its users' passwords.
 Hibernate (the JPA implementation) creates/updates the tables on startup because
 `spring.jpa.hibernate.ddl-auto=update`. This is convenient for the assessment;
 production schema changes would need controlled migrations.
+
+## Run with Docker Compose
+
+Only Docker with Compose is required for this path. Configure `.env` as described
+above; Compose reads it automatically, so no shell export is needed.
+
+```sh
+docker compose build app
+docker compose up -d --wait
+docker compose ps
+curl http://localhost:8080/actuator/health
+```
+
+Alternatively, build the image directly with `docker build -t country-service:local .`.
+The multi-stage Dockerfile compiles with a Java 21 JDK and the Maven wrapper, then
+copies only the executable JAR into a Java 21 JRE image. The runtime runs as
+non-root UID/GID 10001. Curl is installed for the Compose health check. No database
+credentials are baked into the image; `.dockerignore` excludes `.env` files, Git,
+local build outputs, and IDE files from the build context.
+
+Run `./mvnw test` with local environment variables loaded before building (see
+verification instructions below). Image builds skip test execution because the
+integration tests require a running database. The builder still compiles the tests.
+Base images use Java 21 Ubuntu Jammy tags; use `docker compose build --pull app` to
+refresh them. Pin image digests in a production release for reproducible builds.
+
+The app connects to `mysql:3306`, the Compose service hostname. `localhost` inside
+the app container would refer to the app itself. MySQL retains the existing
+`mysql_data` volume. Compose waits for MySQL's SQL health check before starting the
+app; the app becomes healthy when Actuator reports health (including database
+connectivity). This is startup coordination, not automatic recovery orchestration.
+
+The app's host port binds to `127.0.0.1:8080` for local use, including the currently
+unauthenticated Actuator metrics. Stop any host-run Spring application using 8080
+before starting the container. MySQL keeps its existing host port for local Java
+development. To return to that workflow:
+
+```sh
+docker compose stop app
+docker compose up -d mysql
+# Load .env into your shell, then run ./mvnw spring-boot:run as above.
+```
+
+Useful checks and lifecycle commands:
+
+```sh
+docker compose logs --tail=50 app
+docker compose logs --tail=50 mysql
+curl http://localhost:8080/actuator/metrics/http.server.requests
+docker compose exec app id
+docker compose restart app
+docker compose up -d --wait
+# Stop/remove containers and network, preserving the database volume:
+docker compose down
+```
+
+`docker compose down -v` also deletes the database volume and its data; do not use
+it to fix routine startup errors. Rebuilding or restarting the app does not delete
+MySQL records. After code changes, use `docker compose up -d --build --wait`.
+
+For API verification, use the creation and CRUD examples below with a country not
+already stored. Confirm POST returns 201, repeat POST returns 409, GET returns the
+saved data, PUT changes fields/languages, and DELETE returns 204 followed by 404 on
+GET. Restart the app before deleting that record and verify it still exists. A blank
+name should return 400. Leave pre-existing records untouched.
+
+Troubleshooting:
+
+- **Port already allocated:** stop the host Java process or conflicting container;
+  check `docker compose ps` before retrying.
+- **MySQL access denied:** `.env` must match the credentials used to initialize the
+  existing volume; changing environment variables does not rotate stored passwords.
+- **App unhealthy:** inspect app and MySQL logs and health; confirm the container's
+  database URL uses `mysql`, not `localhost`.
+- **Image download/build fails:** check Docker's network/proxy access to Docker Hub,
+  Maven Central, and Ubuntu package repositories. The first build downloads Java
+  images and dependencies and can take several minutes.
+- **POST returns 503/504 while GET works:** inspect SOAP metrics and correlated logs;
+  Docker needs outbound DNS/network access to the public SOAP service. This does
+  not imply that MySQL or the image is broken.
+
+Kubernetes deployment and probes will be added in the next milestone.
 
 ## Create a country
 
