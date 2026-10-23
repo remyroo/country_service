@@ -133,7 +133,7 @@ Troubleshooting:
   Docker needs outbound DNS/network access to the public SOAP service. This does
   not imply that MySQL or the image is broken.
 
-Kubernetes deployment and probes will be added in the next milestone.
+For two application replicas, persistent MySQL, probes, and deployment/troubleshooting commands, see [the Kubernetes guide](k8s/README.md).
 
 ## Create a country
 
@@ -482,5 +482,5 @@ SHOW CREATE TABLE country_language;
 ```
 
 Expect three tables, unique country and language ISO codes, and two foreign keys
-in `country_language` linking the entities. API examples, image builds, Kubernetes deployment,
-and troubleshooting instructions will be added with those milestones.
+in `country_language` linking the entities. See the API and Docker instructions above
+and the [Kubernetes guide](k8s/README.md) for deployment and troubleshooting.

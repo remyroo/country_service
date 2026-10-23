@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: country-config
+  namespace: country-service
+data:
+  MYSQL_DATABASE: country_db
+  DB_URL: jdbc:mysql://mysql:3306/country_db
+  COUNTRY_SOAP_ENDPOINT: http://webservices.oorsprong.org/websamples.countryinfo/CountryInfoService.wso
+  COUNTRY_SOAP_CONNECT_TIMEOUT: 2s
+  COUNTRY_SOAP_READ_TIMEOUT: 5s
+  MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
+  MANAGEMENT_ENDPOINT_HEALTH_GROUP_LIVENESS_INCLUDE: livenessState
+  MANAGEMENT_ENDPOINT_HEALTH_GROUP_READINESS_INCLUDE: readinessState,db
+  SPRING_DATASOURCE_HIKARI_CONNECTIONTIMEOUT: "2000"
+  SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE: "5"
