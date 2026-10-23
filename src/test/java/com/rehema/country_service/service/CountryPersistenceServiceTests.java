@@ -9,6 +9,7 @@ import java.sql.SQLException;
 import java.util.Optional;
 
 import com.rehema.country_service.model.CountryInfo;
+import com.rehema.country_service.exception.DuplicateCountryException;
 import com.rehema.country_service.model.Language;
 import com.rehema.country_service.repository.CountryRepository;
 import com.rehema.country_service.repository.LanguageRepository;
@@ -97,5 +98,17 @@ class CountryPersistenceServiceTests {
         return new DataIntegrityViolationException("Duplicate language", new ConstraintViolationException(
                 "Duplicate language", new SQLException("Duplicate key", "23000", 1062),
                 "language.uk_language_iso_code"));
+    }
+
+    @Test
+    void mapsOnlyCountryIsoConstraintToDuplicateCountry() {
+        when(transactions.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
+        when(countries.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("Duplicate country",
+                new ConstraintViolationException("Duplicate country", new SQLException("Duplicate", "23000", 1062),
+                        "country_info.UKt4i713fne36me9v90nbspc23u")));
+        assertThatThrownBy(() -> service.create(new CountryInfo("KE", "Kenya")))
+                .isInstanceOf(DuplicateCountryException.class);
+        verify(transactions, times(1)).getTransaction(any());
+        verify(transactions).rollback(any());
     }
 }

@@ -1,6 +1,7 @@
 package com.rehema.country_service.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mockingDetails;
 
@@ -81,6 +82,8 @@ class CountryPersistenceIntegrationTests {
                             .extracting(Language::getId).containsExactly(shared.getId());
                 }
             });
+            assertThatThrownBy(() -> service.create(new CountryInfo("ZZ", "Duplicate test country")))
+                    .isInstanceOf(com.rehema.country_service.exception.DuplicateCountryException.class);
         } finally {
             // These transactions commit to exercise the race; remove only this test's rows.
             transaction.executeWithoutResult(status -> {

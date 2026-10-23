@@ -4,9 +4,9 @@ A Java 21 / Spring Boot application that will look up country information throug
 SOAP, store it in MySQL, and expose REST CRUD operations.
 
 Currently implemented: the `CountryInfo` and `Language` entities, their repositories,
-`CountryPersistenceService` for saving a country with shared languages, and a tested
-SOAP client. REST endpoints and orchestration between SOAP and persistence are
-upcoming milestones.
+`CountryPersistenceService` for saving a country with shared languages, a tested
+SOAP client, and `POST /countries` connecting lookup to persistence. Read, update,
+and delete REST endpoints are upcoming milestones.
 
 ## Run locally
 
@@ -53,6 +53,84 @@ Hibernate (the JPA implementation) creates/updates the tables on startup because
 `spring.jpa.hibernate.ddl-auto=update`. This is convenient for the assessment;
 production schema changes would need controlled migrations.
 
+## Create a country
+
+With MySQL healthy and the application running:
+
+```sh
+curl -i http://localhost:8080/countries \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"  kENYA  "}'
+```
+
+The flow is: validate the name, trim and convert to sentence case (`Kenya`), call
+`CountryISOCode`, call `FullCountryInfo`, map the data, save the country with shared
+languages, then return `201 Created`. The response includes the generated country
+and language IDs and a `Location: /countries/{id}` header. The GET endpoint at that
+location will be added in the CRUD milestone. Repeating a successful creation
+returns `409 Conflict`; it does not update the stored country.
+
+Example response (IDs and language data depend on the database and SOAP response):
+
+```json
+{
+  "id": 1,
+  "isoCode": "KE",
+  "name": "Kenya",
+  "capital": "Nairobi",
+  "phoneCode": "254",
+  "continentCode": "AF",
+  "currencyCode": "KES",
+  "flagUrl": "http://www.oorsprong.org/WebSamples.CountryInfo/Flags/Kenya.jpg",
+  "languages": [{"id": 1, "isoCode": "swa", "name": "Swahili"}]
+}
+```
+
+`CountryController` handles HTTP and `@Valid` request validation. `CountryService`
+coordinates the SOAP calls and mapping; `CountryPersistenceService` owns the short
+database transaction. SOAP failures therefore cannot create partial database rows.
+Sentence case is literal and locale-independent: `UNITED STATES` becomes
+`United states`. Names must be nonblank and at most 255 characters.
+
+Response DTOs are Java records rather than database entities. Open EntityManager
+in View is disabled, so serializing a response cannot cause hidden database reads.
+The creation path maps the already-loaded saved country and languages into DTOs.
+
+Errors use Spring's `ProblemDetail` JSON format with `status`, `title`, and `detail`:
+
+| Failure | HTTP status |
+| --- | --- |
+| Missing/blank/overlong name or malformed JSON | 400 |
+| Unknown country | 404 |
+| Country already stored | 409 |
+| Invalid upstream response or SOAP fault | 502 |
+| SOAP unavailable | 503 |
+| SOAP timeout | 504 |
+| Other database or unexpected failure | 500 |
+
+Only the existing country ISO unique index is translated to a duplicate-country
+error; other integrity violations remain server errors. The persistence code
+matches Hibernate's current generated index name, verified by a MySQL integration
+test. If that index is renamed in a future schema change, update the matching
+constant as well. Database/stack-trace details are logged, not returned to callers.
+
+To verify validation without making a SOAP call:
+
+```sh
+curl -i http://localhost:8080/countries \
+  -H 'Content-Type: application/json' -d '{"name":" "}'
+```
+
+Run just the service and controller tests without MySQL or public-service access:
+
+```sh
+./mvnw -Dtest=CountryServiceTests,CountryControllerTests test
+```
+
+Service tests mock SOAP and persistence to check normalization, ordering, mapping,
+and early termination on failure. MockMvc tests send simulated HTTP requests and
+verify validation, status codes, the Location header, and safe response bodies.
+
 ## SOAP client
 
 `CountrySoapClient` provides two independent methods:
@@ -65,8 +143,8 @@ production schema changes would need controlled migrations.
 `CountryDetails` and `LanguageDetails` are Java records: small immutable data
 carriers separate from the JPA entities. The country record also copies its list
 to prevent callers from modifying its languages. The client never accesses MySQL.
-Country-name normalization and calling these operations in sequence will be the
-application service's responsibility in the next milestone.
+`CountryService` normalizes the country name, calls these operations in sequence,
+and passes the mapped details into persistence.
 
 `SoapConfig` registers a `WebServiceTemplate` bean (an object managed by Spring)
 using Boot's builder and configurable connection/read timeouts. The client receives
