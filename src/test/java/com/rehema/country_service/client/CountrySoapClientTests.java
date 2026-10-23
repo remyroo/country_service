@@ -40,7 +40,10 @@ class CountrySoapClientTests {
         WebServiceTemplate template = new WebServiceTemplate();
         template.setDefaultUri(ENDPOINT);
         server = MockWebServiceServer.createServer(template);
-        client = new CountrySoapClient(template);
+        client = new CountrySoapClient(template, new SoapResilience(
+                io.github.resilience4j.circuitbreaker.CircuitBreaker.ofDefaults("test"),
+                io.github.resilience4j.retry.RetryConfig.custom().maxAttempts(1).build(),
+                new io.micrometer.core.instrument.simple.SimpleMeterRegistry()));
     }
 
     @AfterEach

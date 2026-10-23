@@ -34,15 +34,21 @@ public class CountrySoapClient {
     private static final Logger log = LoggerFactory.getLogger(CountrySoapClient.class);
 
     private final WebServiceTemplate template;
+    private final SoapResilience resilience;
 
-    public CountrySoapClient(WebServiceTemplate template) {
+    public CountrySoapClient(WebServiceTemplate template, SoapResilience resilience) {
         this.template = template;
+        this.resilience = resilience;
     }
 
     public String getCountryIsoCode(String countryName) {
         if (countryName == null || countryName.isBlank()) {
             throw new IllegalArgumentException("Country name must not be blank");
         }
+        return resilience.execute("CountryISOCode", () -> lookupIsoCode(countryName));
+    }
+
+    private String lookupIsoCode(String countryName) {
         Element response = exchange("CountryISOCode", "sCountryName", countryName);
         String code = text(response, "CountryISOCodeResult");
         if ("No country found by that name".equals(code)) {
@@ -56,6 +62,10 @@ public class CountrySoapClient {
         if (isoCode == null || !isoCode.matches("[A-Z]{2}")) {
             throw new IllegalArgumentException("Country ISO code must be two uppercase letters");
         }
+        return resilience.execute("FullCountryInfo", () -> lookupFullCountry(isoCode));
+    }
+
+    private CountryDetails lookupFullCountry(String isoCode) {
         Element response = exchange("FullCountryInfo", "sCountryISOCode", isoCode);
         Element result = child(response, "FullCountryInfoResult");
         String code = text(result, "sISOCode");
@@ -93,7 +103,7 @@ public class CountrySoapClient {
     private Element exchange(String operation, String parameter, String value) {
         DOMSource request = request(operation, parameter, value);
         DOMResult response = new DOMResult();
-        log.info("Calling country SOAP operation={}", operation);
+        log.atInfo().addKeyValue("operation", operation).log("Calling country SOAP");
         try {
             // Both SOAP 1.1 operations declare soapAction="" in the provider's WSDL.
             boolean received = template.sendSourceAndReceiveToResult(request, new SoapActionCallback(""), response);
@@ -105,11 +115,9 @@ public class CountrySoapClient {
             log.debug("Received country SOAP operation={}", operation);
             return root;
         } catch (SoapFaultClientException exception) {
-            log.warn("Country SOAP fault operation={}", operation);
             throw new SoapServiceException(Reason.FAULT, exception);
         } catch (WebServiceIOException exception) {
             Reason reason = isTimeout(exception) ? Reason.TIMEOUT : Reason.UNAVAILABLE;
-            log.warn("Country SOAP failure operation={} reason={}", operation, reason);
             throw new SoapServiceException(reason, exception);
         } catch (WebServiceException exception) {
             throw new InvalidSoapResponseException("Could not read SOAP response", exception);

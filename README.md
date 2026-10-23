@@ -103,7 +103,7 @@ Errors use Spring's `ProblemDetail` JSON format with `status`, `title`, and `det
 | Unknown country | 404 |
 | Country already stored | 409 |
 | Invalid upstream response or SOAP fault | 502 |
-| SOAP unavailable | 503 |
+| SOAP unavailable or circuit open | 503 |
 | SOAP timeout | 504 |
 | Other database or unexpected failure | 500 |
 
@@ -226,8 +226,8 @@ Failures are represented by exceptions, ready for future REST error mapping:
 - `SoapServiceException`: distinguishes `UNAVAILABLE`, `TIMEOUT`, and `FAULT`.
   Raw upstream fault text is retained only in the cause, not the public message.
 
-No retry or circuit breaker is added in this milestone. SOAP faults remain distinct
-from transport failures so later retry logic can avoid retrying every failure.
+SOAP operations now use bounded retries and a shared circuit breaker, described below.
+SOAP faults remain distinct from transient transport failures and are not retried.
 
 Run just the SOAP tests without MySQL or public-service access:
 
@@ -240,6 +240,92 @@ the endpoint and SOAP action, then supplies local XML fixtures. Tests cover mapp
 multiple/empty languages, alternate prefixes, XML escaping, unknown countries,
 malformed responses, faults, and simulated transport/timeouts. Simulating a timeout
 tests exception handling; it does not measure real network timeout timing.
+
+## Resilience and observability
+
+Resilience4j's retry and circuit-breaker core modules provide the state management.
+`SoapResilienceConfig` defines the policies; `SoapResilience.execute` applies them
+around each complete SOAP operation, including response mapping. We use explicit
+Java calls, not annotation interception or Spring Cloud. See the official
+[retry](https://resilience4j.readme.io/docs/retry) and
+[circuit-breaker](https://resilience4j.readme.io/docs/circuitbreaker) documentation.
+
+- Only unavailability and timeouts are retried: one initial attempt plus one retry.
+- Unknown countries, invalid responses, and SOAP faults are neither retried nor
+  included in the circuit's failure-rate calculation.
+- Each SOAP operation retries independently. A full-country retry never repeats
+  the ISO lookup. Database operations are outside this policy.
+- One circuit is shared by both SOAP operations. It counts final operation outcomes
+  after retry exhaustion, not individual network attempts. Once open, new
+  operations fail immediately without retrying or sending a request.
+- After the open interval, the next request may make one recovery probe. Success
+  closes the circuit; another transient failure reopens it. The probe itself uses
+  the same bounded retry policy. No background polling is required.
+- Fallback means a safe error: unavailable/open circuit returns 503; exhausted
+  timeouts return 504. No fabricated or stale country data is returned. Stored-data
+  CRUD remains usable, and SOAP failure prevents persistence.
+
+| Property | Default |
+| --- | --- |
+| `country.soap.retry.max-attempts` | 2, including initial attempt; allowed range 1–3 |
+| `country.soap.retry.delay` | 200ms |
+| `country.soap.circuit.window-size` | 10 final operations |
+| `country.soap.circuit.minimum-calls` | 4 recorded operations |
+| `country.soap.circuit.failure-rate` | 50 percent |
+| `country.soap.circuit.open-duration` | 10s |
+
+These properties can be overridden externally (for example,
+`COUNTRY_SOAP_CIRCUIT_OPEN_DURATION=30s`). Existing transport timeouts stay at 2s
+for connection and 5s for reading. If both operations each take two attempts, the
+configured connect/read waits and retry delays can total roughly 28.4 seconds.
+This is not a strict end-to-end deadline; transport/DNS behavior can affect elapsed
+time. Retries block the request thread, intentionally keeping this small service
+synchronous. Circuit state and metrics are per application instance, reset at
+restart, and do not require shared infrastructure across replicas.
+
+Console logs use Spring Boot's built-in Logstash JSON format. Every HTTP request
+gets a generated `X-Request-ID` response header; the same `requestId` is attached to
+its logs through MDC (a thread-local logging context), then cleared/restored when
+the request finishes. The ID is for correlation only. SOAP records include
+`operation`, `outcome`, retry number, or circuit transition. Request completion
+records include method, status, and duration. No request bodies, passwords, or
+country names are added as metric labels.
+
+Actuator exposes `/actuator/health` and `/actuator/metrics`:
+
+```sh
+curl http://localhost:8080/actuator/health
+curl http://localhost:8080/actuator/metrics/country.soap.operation
+curl http://localhost:8080/actuator/metrics/country.soap.attempts
+curl http://localhost:8080/actuator/metrics/country.soap.retries
+curl http://localhost:8080/actuator/metrics/country.soap.rejected
+curl 'http://localhost:8080/actuator/metrics/country.soap.circuit.state?tag=state:OPEN'
+curl http://localhost:8080/actuator/metrics/http.server.requests
+```
+
+The operation timer reports count and duration, tagged by operation and outcome.
+Counters track actual attempts, scheduled retries, and circuit-rejected operations.
+The circuit gauge is 1 for the active state and 0 for other states. Counters/timers
+appear after their first event. Labels have bounded values; request IDs never
+become metric tags. Health remains independent of SOAP availability so an upstream
+outage does not mark stored CRUD unhealthy. Database health is still checked.
+
+For a local failure drill, export `.env` as above and start with
+`COUNTRY_SOAP_ENDPOINT=http://127.0.0.1:1 ./mvnw spring-boot:run`. Send five POST
+requests within ten seconds. With the defaults, expect eight outbound attempts,
+four retries, then one circuit rejection, with all responses 503. GET should still
+work and no country should be created. Inspect metrics and correlate the response
+header with the JSON logs. Restart with the normal endpoint afterward.
+
+Actuator metrics are exposed without authentication in this local assessment.
+Restrict their network exposure or add authentication for deployment; do not expose
+all Actuator endpoints publicly. Production log collection and a Micrometer
+Prometheus registry/exporter could be added later; neither is installed here.
+
+Focused resilience tests use zero retry delays and explicit circuit transitions to
+cover retry recovery/exhaustion, non-transient exclusions, open-circuit rejection,
+recovery, and metric updates. Existing tests cover timeout classification, HTTP
+fallback responses, SOAP failures preventing persistence, and CRUD independence.
 
 ## Persistence design
 

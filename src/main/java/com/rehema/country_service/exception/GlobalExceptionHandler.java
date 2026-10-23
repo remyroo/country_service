@@ -53,7 +53,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(InvalidSoapResponseException.class)
     public ProblemDetail invalidSoapResponse(InvalidSoapResponseException exception) {
-        log.warn("Country service returned invalid SOAP data", exception);
+        log.warn("Country service returned invalid SOAP data");
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, "Country information service returned an invalid response");
     }
 
@@ -61,7 +61,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     public ProblemDetail soapFailure(SoapServiceException exception) {
         HttpStatus status = switch (exception.getReason()) {
             case TIMEOUT -> HttpStatus.GATEWAY_TIMEOUT;
-            case UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
+            case UNAVAILABLE, CIRCUIT_OPEN -> HttpStatus.SERVICE_UNAVAILABLE;
             case FAULT -> HttpStatus.BAD_GATEWAY;
         };
         return ProblemDetail.forStatusAndDetail(status, exception.getMessage());

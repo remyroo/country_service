@@ -99,6 +99,7 @@ class CountryControllerTests {
                 Arguments.of(new SoapServiceException(SoapServiceException.Reason.FAULT, cause), 502),
                 Arguments.of(new SoapServiceException(SoapServiceException.Reason.UNAVAILABLE, cause), 503),
                 Arguments.of(new SoapServiceException(SoapServiceException.Reason.TIMEOUT, cause), 504),
+                Arguments.of(new SoapServiceException(SoapServiceException.Reason.CIRCUIT_OPEN, cause), 503),
                 Arguments.of(new DataIntegrityViolationException("internal-secret"), 500),
                 Arguments.of(cause, 500));
     }

@@ -1,0 +1,58 @@
+{
+  "properties": [
+    {
+      "name": "country.soap.endpoint",
+      "type": "java.lang.String",
+      "description": "SOAP service URL, without the WSDL query string.",
+      "sourceType": "com.rehema.country_service.config.SoapConfig"
+    },
+    {
+      "name": "country.soap.connect-timeout",
+      "type": "java.time.Duration",
+      "description": "Connection timeout for each SOAP attempt. Must be positive.",
+      "sourceType": "com.rehema.country_service.config.SoapConfig"
+    },
+    {
+      "name": "country.soap.read-timeout",
+      "type": "java.time.Duration",
+      "description": "Read timeout for each SOAP attempt. Must be positive.",
+      "sourceType": "com.rehema.country_service.config.SoapConfig"
+    },
+    {
+      "name": "country.soap.retry.max-attempts",
+      "type": "java.lang.Integer",
+      "description": "Maximum attempts per SOAP operation, including the initial attempt. Allowed range: 1 to 3.",
+      "sourceType": "com.rehema.country_service.config.SoapResilienceConfig"
+    },
+    {
+      "name": "country.soap.retry.delay",
+      "type": "java.time.Duration",
+      "description": "Nonnegative delay between transient-failure retry attempts.",
+      "sourceType": "com.rehema.country_service.config.SoapResilienceConfig"
+    },
+    {
+      "name": "country.soap.circuit.window-size",
+      "type": "java.lang.Integer",
+      "description": "Number of completed operations in the shared circuit breaker sliding window.",
+      "sourceType": "com.rehema.country_service.config.SoapResilienceConfig"
+    },
+    {
+      "name": "country.soap.circuit.minimum-calls",
+      "type": "java.lang.Integer",
+      "description": "Minimum recorded operations before evaluating the failure rate. Must not exceed the window size.",
+      "sourceType": "com.rehema.country_service.config.SoapResilienceConfig"
+    },
+    {
+      "name": "country.soap.circuit.failure-rate",
+      "type": "java.lang.Float",
+      "description": "Failure percentage that opens the circuit once the minimum call count is reached.",
+      "sourceType": "com.rehema.country_service.config.SoapResilienceConfig"
+    },
+    {
+      "name": "country.soap.circuit.open-duration",
+      "type": "java.time.Duration",
+      "description": "Positive duration the circuit remains open before allowing a recovery probe.",
+      "sourceType": "com.rehema.country_service.config.SoapResilienceConfig"
+    }
+  ]
+}

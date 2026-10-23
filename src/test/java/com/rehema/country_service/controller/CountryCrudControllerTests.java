@@ -33,7 +33,7 @@ class CountryCrudControllerTests {
 
     @Test
     void listsCountriesAndReturnsEmptyArrayWhenEmpty() throws Exception {
-        when(service.getCountries()).thenReturn(List.of(response()), List.of());
+        when(service.getCountries()).thenReturn(List.of(response())).thenReturn(List.of());
         mvc.perform(get("/countries")).andExpect(status().isOk()).andExpect(jsonPath("$[0].languages[0].isoCode").value("fr"));
         mvc.perform(get("/countries")).andExpect(status().isOk()).andExpect(content().json("[]"));
     }
